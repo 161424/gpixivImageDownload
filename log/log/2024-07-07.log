@@ -1,8 +1,0 @@
-time="2024-07-07 01:27:41" level=INFO source=config.go:36 msg="config 读取成功"
-time="2024-07-07 01:27:41" level=INFO source=browserRank.go:68 msg=Proxy:http://127.0.0.1:10809
-time="2024-07-07 01:42:37" level=INFO source=config.go:36 msg="config 读取成功"
-time="2024-07-07 01:42:37" level=INFO source=browserRank.go:68 msg=Proxy:http://127.0.0.1:10809
-time="2024-07-07 01:51:14" level=INFO source=config.go:36 msg="config 读取成功"
-time="2024-07-07 01:51:14" level=INFO source=browserRank.go:68 msg=Proxy:http://127.0.0.1:10809
-time="2024-07-07 01:52:31" level=INFO source=config.go:36 msg="config 读取成功"
-time="2024-07-07 01:52:31" level=INFO source=browserRank.go:68 msg=Proxy:http://127.0.0.1:10809
