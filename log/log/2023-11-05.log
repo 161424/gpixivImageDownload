@@ -1,0 +1,22 @@
+time=2023-11-05T17:34:28.569+08:00 level=WARN source=D:/编程/goland/git/go-pixiv/download_pixiv_pic/test/test_config.go:21 msg=文件读取错误 code=2
+time=2023-11-05T17:35:35.906+08:00 level=INFO source=D:/编程/goland/git/go-pixiv/download_pixiv_pic/test/test_config.go:27 msg="D:\\编程\\goland\\git\\go-pixiv\\download_pixiv_pic\\test 读取成功" code=4
+time=2023-11-05T17:37:54.065+08:00 level=INFO source=D:/编程/goland/git/go-pixiv/download_pixiv_pic/test/test_config.go:27 msg="D:\\编程\\goland\\git\\go-pixiv\\download_pixiv_pic\\test 读取成功" code=4
+time=2023-11-05T17:38:03.821+08:00 level=INFO source=D:/编程/goland/git/go-pixiv/download_pixiv_pic/test/test_config.go:27 msg="D:\\编程\\goland\\git\\go-pixiv\\download_pixiv_pic\\test 读取成功" code=4
+time=2023-11-05T17:38:11.848+08:00 level=INFO source=D:/编程/goland/git/go-pixiv/download_pixiv_pic/test/test_config.go:27 msg="D:\\编程\\goland\\git\\go-pixiv\\download_pixiv_pic\\test 读取成功" code=4
+time=2023-11-05T17:40:19.743+08:00 level=INFO source=D:/编程/goland/git/go-pixiv/download_pixiv_pic/test/test_config.go:27 msg="D:\\编程\\goland\\git\\go-pixiv\\download_pixiv_pic\\test 读取成功" code=4
+time=2023-11-05T22:49:25.874+08:00 level=WARN source=D:/编程/goland/git/go-pixiv/download_pixiv_pic/conf/config.go:24 msg=文件读取错误 code=2
+time=2023-11-05T22:49:25.874+08:00 level=INFO source=D:/编程/goland/git/go-pixiv/download_pixiv_pic/test/test_config.go:30 msg="D:\\编程\\goland\\git\\go-pixiv\\download_pixiv_pic\\test 读取成功" code=4
+time=2023-11-05T22:51:00.790+08:00 level=WARN source=D:/编程/goland/git/go-pixiv/download_pixiv_pic/conf/config.go:24 msg=文件读取错误 code=2
+time=2023-11-05T22:51:00.790+08:00 level=INFO source=D:/编程/goland/git/go-pixiv/download_pixiv_pic/test/test_config.go:30 msg="D:\\编程\\goland\\git\\go-pixiv\\download_pixiv_pic\\test 读取成功" code=4
+time=2023-11-05T22:52:01.949+08:00 level=WARN source=D:/编程/goland/git/go-pixiv/download_pixiv_pic/conf/config.go:24 msg=文件读取错误 code=2
+time=2023-11-05T22:52:01.950+08:00 level=INFO source=D:/编程/goland/git/go-pixiv/download_pixiv_pic/test/test_config.go:30 msg="D:\\编程\\goland\\git\\go-pixiv\\download_pixiv_pic\\test 读取成功" code=4
+time=2023-11-05T22:52:22.971+08:00 level=WARN source=D:/编程/goland/git/go-pixiv/download_pixiv_pic/conf/config.go:25 msg=文件读取错误 code=2
+time=2023-11-05T22:52:22.971+08:00 level=INFO source=D:/编程/goland/git/go-pixiv/download_pixiv_pic/test/test_config.go:30 msg="D:\\编程\\goland\\git\\go-pixiv\\download_pixiv_pic\\test 读取成功" code=4
+time=2023-11-05T22:52:39.619+08:00 level=WARN source=D:/编程/goland/git/go-pixiv/download_pixiv_pic/conf/config.go:25 msg=文件读取错误 code=2
+time=2023-11-05T22:52:39.620+08:00 level=INFO source=D:/编程/goland/git/go-pixiv/download_pixiv_pic/test/test_config.go:30 msg="D:\\编程\\goland\\git\\go-pixiv\\download_pixiv_pic\\test 读取成功" code=4
+time=2023-11-05T22:52:47.893+08:00 level=WARN source=D:/编程/goland/git/go-pixiv/download_pixiv_pic/conf/config.go:25 msg=文件读取错误 code=2
+time=2023-11-05T22:52:47.894+08:00 level=INFO source=D:/编程/goland/git/go-pixiv/download_pixiv_pic/test/test_config.go:30 msg="D:\\编程\\goland\\git\\go-pixiv\\download_pixiv_pic\\test 读取成功" code=4
+time=2023-11-05T22:53:25.248+08:00 level=INFO source=D:/编程/goland/git/go-pixiv/download_pixiv_pic/conf/config.go:31 msg="D:\\编程\\goland\\git\\go-pixiv\\download_pixiv_pic\\test 读取成功" code=4
+time=2023-11-05T22:53:25.249+08:00 level=INFO source=D:/编程/goland/git/go-pixiv/download_pixiv_pic/test/test_config.go:30 msg="D:\\编程\\goland\\git\\go-pixiv\\download_pixiv_pic\\test 读取成功" code=4
+time=2023-11-05T22:53:49.017+08:00 level=INFO source=D:/编程/goland/git/go-pixiv/download_pixiv_pic/conf/config.go:31 msg="D:\\编程\\goland\\git\\go-pixiv\\download_pixiv_pic\\test 读取成功" code=4
+time=2023-11-05T22:53:49.017+08:00 level=INFO source=D:/编程/goland/git/go-pixiv/download_pixiv_pic/test/test_config.go:30 msg="D:\\编程\\goland\\git\\go-pixiv\\download_pixiv_pic\\test 读取成功" code=4
