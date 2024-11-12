@@ -2,7 +2,7 @@ Website = "https://example.com"
 
 [Details]
   Icon = "Icon.png"
-  Name = "My App Icon"
+  Name = "My App Icon Slaver"
   ID = "com.example.app"
   Version = "1.0.0"
   Build = 1
