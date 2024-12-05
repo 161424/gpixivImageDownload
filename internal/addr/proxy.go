@@ -1,6 +1,8 @@
 package addr
 
-import "gpixivImageDownload/conf"
+import (
+	"gpixivImageDownload/conf"
+)
 
 type proxy struct {
 	Ip   string
@@ -22,6 +24,7 @@ func init() {
 	Proxy.Ip = l.GetString("NetWork.ProxyIp")
 	Proxy.Port = l.GetString("NetWork.ProxyPort")
 	Header.UserAgent = l.GetString("Authentication.UserAgent")
+	//fmt.Println(Proxy)
 
 }
 

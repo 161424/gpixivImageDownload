@@ -7,95 +7,96 @@ import (
 	"github.com/PuerkitoBio/goquery"
 	"gpixivImageDownload/dao/sql"
 	errs "gpixivImageDownload/internal/err"
-	"gpixivImageDownload/log"
+	log2 "gpixivImageDownload/log"
 	"gpixivImageDownload/model"
 	"gpixivImageDownload/model/utils"
 	"gpixivImageDownload/pkg/core"
 	"gpixivImageDownload/pkg/utils/browser"
 	"log/slog"
-	"slices"
+	url2 "net/url"
+	"strconv"
 	"strings"
 )
 
-var l *log.Logs
-
-//var ipA = &inputAuthor{
-//	User:  "author",
-//	DwTop: 24,
-//}
-//
-//type inputAuthor struct {
-//	User       string
-//	AuthorId   string
-//	AuthorName string
-//	DwTop      int
-//	Tags       string
-//	BookMark   bool
-//	OffSet     string
-//	Profile    bool
-//}
-
-//func init() {
-//	cmdRoot.AddCommand(cmdAuthor)
-//	if cmdAuthor.MarkFlagRequired("authorid") != nil && cmdAuthor.MarkFlagRequired("authorname") != nil {
-//		l.Send(slog.LevelError, "author信息未输入", log.LogFiles|log.LogStdouts)
-//		panic("")
-//	}
-//	f := cmdAuthor.Flags()
-//	f.StringVarP(&ipA.AuthorId, "authorid", "i", ipA.AuthorId, "作者id")
-//	f.StringVarP(&ipA.AuthorName, "authorname", "n", ipA.AuthorName, "作者名字")
-//
-//	f.IntVarP(&ipA.DwTop, "count", "c", ipA.DwTop, "默认下载数量")
-//	f.IntVarP(&ipA.DwType, "type", "t", ipA.DwType, "1代表下载插画，2代表收藏，3代表全都要")
-//
-//}
+var l = log2.Logger
+var defaultUserUrl = "https://www.pixiv.net/users/"
 
 func DownLoadAuth(ctx context.Context, cmpts *model.Common, autpts *model.Author, pip chan float64, result *string) {
-	DwSucc := 0
-	DwErr := 0
+	stopG := false
+	go func() {
+		<-ctx.Done()
+		stopG = true
+	}()
+	autpts.OffSet = 0
+	var DwSucc int64 = 0
+	var DwErr int64 = 0
 	olduid := []string{}
-	oldname := []string{}
-	ctxChild, _ := context.WithCancel(ctx)
+	//oldname := []string{}
+
 	var url []string
 	// 确认uid或name的有效性
+	fmt.Println(autpts)
 	if len(autpts.AuthorId) != 0 {
 		for _, auid := range autpts.AuthorId {
-			if slices.Contains(olduid, auid) {
+			if _, err := strconv.Atoi(auid); err != nil {
 				continue
 			}
-			// https://www.pixiv.net/ajax/user/1122006
-			_url := "https://www.pixiv.net/user/" + auid
-			rb := browser.GetPixivPage(_url)
+			// https://www.pixiv.net/ajax/users/1122006
+			_url := defaultUserUrl + auid
+			// 初次判断链接是否正确
+			rb, err := browser.GetPixivPage(_url, 0)
+			if err != nil {
+				continue
+			}
 			if strings.Contains(string(rb), errs.GetMsg(errs.UIDERR)) {
 				url = append(url, errs.GetMsg(errs.UIDERR))
 			} else {
 				url = append(url, _url)
 			}
 			olduid = append(olduid, auid)
-			r := map[string]interface{}{}
-			body := r["body"].(map[string]interface{})
-			oldname = append(oldname, body["name"].(string))
 		}
 	}
+	// https://www.pixiv.net/search/users?nick=ひづるめ%28Hidzzz%29&s_mode=s_usr
 	if len(autpts.AuthorName) != 0 {
 		for _, aname := range autpts.AuthorName {
-			auid := ""
-			_url := fmt.Sprintf("https://www.pixiv.net/search_user.php?s_mode=s_usr&i=0&nick=%s", aname)
-			rb := browser.GetPixivPage(_url)
+			if strings.TrimSpace(aname) == "" {
+				continue
+			}
+			fmt.Println("?", aname)
+			//_url := fmt.Sprintf("https://www.pixiv.net/search_user.php?s_mode=s_usr&i=0&nick=%s", aname)
+			//nick=ひづるめ(Hidzzz)&s_mode=s_usr
+
+			// 若不对特殊字符进行编码，会导致错误
+			aname = url2.QueryEscape(aname)
+			_url := fmt.Sprintf("https://www.pixiv.net/search/users?nick=%s&s_mode=s_usr&", aname)
+
+			// 获取到用户的uid
+			rb, err := browser.GetPixivPage(_url, 0)
+
+			if err != nil {
+				continue
+			}
+
 			rep := bytes.NewReader(rb)
 			doc, _ := goquery.NewDocumentFromReader(rep)
-			sec, exist := doc.Find(".user-recommendation-item > a").Attr("href")
-			if exist {
-				auid = strings.Split(sec, "/")[2]
-				if slices.Contains(olduid, auid) {
-					continue
+			hu := map[string]struct{}{}
+			doc.Find("a").Each(func(i int, s *goquery.Selection) {
+				// 检查 class 属性是否存在且不为空
+				if s.AttrOr("data-ga4-entity-id", "") != "" {
+					// 处理没有 class 属性或 class 属性为空的 <a> 标签
+					link, exists := s.Attr("href")
+					if exists {
+						auid := strings.Split(link, "/")[2]
+						hu[auid] = struct{}{}
+					}
 				}
+			})
+			for key, _ := range hu {
+				olduid = append(olduid, key)
+				_url = defaultUserUrl + key
 				url = append(url, _url)
-			} else {
-				url = append(url, errs.GetMsg(errs.NameErr))
 			}
-			olduid = append(olduid, auid)
-			oldname = append(oldname, aname)
+
 		}
 
 	}
@@ -108,50 +109,62 @@ func DownLoadAuth(ctx context.Context, cmpts *model.Common, autpts *model.Author
 		rootPath = cmpts.DownloadPath
 	}
 
-	utils.QuoteOrCreateFile(rootPath)
+	err := utils.QuoteOrCreateFile(rootPath)
+	if err != nil {
+		*result = err.Error()
+		return
+	}
 	for idx, urls := range url {
+
+		fmt.Println("url", url, urls, autpts.Tags)
+
 		pageurl := ""
 		if urls[:4] != "http" {
 			continue
 		}
-		l.Send(slog.LevelInfo, fmt.Sprintf("Processing Member Id: %s", olduid[idx]), log.LogFiles|log.LogStdouts)
+		l.Send(slog.LevelInfo, fmt.Sprintf("Processing Member Id: %s", olduid[idx]), 3)
 		// 空间，头像等 https://www.pixiv.net/ajax/user/%s/profile/all
 		if autpts.BookMark {
 			// 表示收藏 https://www.pixiv.net/ajax/user/6558698/illusts/bookmarks?tag=FGO&offset=0&limit=24&rest=show
 			pageurl = fmt.Sprintf("https://www.pixiv.net/ajax/user/%s/illusts/bookmarks?tag=%s&offset=%d&limit=%d&rest=show", olduid[idx], autpts.Tags, autpts.OffSet, autpts.DwTop)
-			autpts.Tags = append(autpts.Tags, "BookMark")
+			autpts.Tags = "BookMark"
 		} else {
 			if len(autpts.Tags) > 0 {
 				pageurl = fmt.Sprintf("https://www.pixiv.net/ajax/user/%s/illustmanga/tag?tag=%s&offset=%d&limit=%d", olduid[idx], autpts.Tags, autpts.OffSet, autpts.DwTop)
 			} else if cmpts.R18 == false {
-				pageurl = fmt.Sprintf("https://www.pixiv.net/ajax/user/%s/illustmanga/tag?tag=R-18&offset=%s&limit=%s", olduid[idx], autpts.OffSet, autpts.DwTop)
+				pageurl = fmt.Sprintf("https://www.pixiv.net/ajax/user/%s/illustmanga/tag?tag=R-18&offset=%d&limit=%s", olduid[idx], autpts.OffSet, autpts.DwTop)
 			} else {
 				// 表示作品 https://www.pixiv.net/ajax/user/6558698/illustmanga/tag?tag=&offset=0&limit=24
 				pageurl = fmt.Sprintf("https://www.pixiv.net/ajax/user/%s/illustmanga/tag?tag=&offset=%d&limit=%d", olduid[idx], autpts.OffSet, autpts.DwTop)
 			}
 		}
-
-		//if !autpts.Profile {
-		//
-		//}
+		fmt.Println("pageurl", pageurl)
 		artistWork = core.GetAuthorWork(pageurl)
+		if artistWork.Error != "" {
+			fmt.Println(artistWork.Error)
+			continue
+		}
 		for _, imgwork := range artistWork.Works {
-			select {
-			case <-ctxChild.Done():
+			if stopG {
+				*result += "下载已停止"
 				return
-			default:
 			}
-			re, err := core.ProcessAuthImage(rootPath, imgwork, cmpts.R18, autpts.Tags)
-			fmt.Println(re, err)
+
+			re, err := core.ProcessAuthImage(ctx, rootPath, imgwork, cmpts.R18, autpts.Tags)
+			if err != nil {
+				fmt.Println(re, err)
+			}
+
 			DwSucc += re[0]
 			DwErr += re[1]
-
+			pip <- float64(idx / len(url))
 		}
-		pip <- float64(idx / len(url))
+
 		//l.Send(slog.LevelInfo, fmt.Sprintf("Member Url %s\n", pageurl), log.LogFiles|log.LogStdouts)
 
 	}
-	*result = fmt.Sprintf("识别到%d个用户，成功下载%d个图片，下载失败%d个图片", len(url), DwSucc, DwErr)
+	pip <- 1.0
+	*result += fmt.Sprintf("识别到%d个用户，成功下载%d个图片，下载失败%d个图片", len(url), DwSucc, DwErr)
 
 }
 

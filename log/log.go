@@ -16,7 +16,7 @@ const (
 	LogStdouts
 )
 
-var logs = &Logs{}
+var Logger = &Logs{}
 
 // type L = logs
 type Logs struct {
@@ -71,22 +71,21 @@ func init() {
 			return a
 		},
 	}
-
+	NewDefaultSlog()
 }
 
 func NewSlogGroup(group string) *Logs {
-	logs.logFile = slog.New(slog.NewTextHandler(logFile, &opt).WithGroup(group))
-	logs.logStdout = slog.New(slog.NewTextHandler(os.Stdout, &opt).WithGroup(group))
-
-	return logs
+	newLog := new(Logs)
+	newLog.logFile = slog.New(slog.NewTextHandler(logFile, &opt).WithGroup(group))
+	newLog.logStdout = slog.New(slog.NewTextHandler(os.Stdout, &opt).WithGroup(group))
+	return newLog
 }
-func Gt() {
 
-}
 func NewDefaultSlog() *Logs {
-	logs.logFile = slog.New(slog.NewTextHandler(logFile, &opt))
-	logs.logStdout = slog.New(slog.NewTextHandler(os.Stdout, &opt))
-	return logs
+	Logger.logFile = slog.New(slog.NewTextHandler(logFile, &opt))
+	Logger.logStdout = slog.New(slog.NewTextHandler(os.Stdout, &opt))
+
+	return Logger
 	//slog.LogAttrs()
 }
 
@@ -97,7 +96,9 @@ func (l *Logs) Send(level slog.Level, msg string, ls Tp, args ...any) {
 	if len(args) == 0 {
 		args = nil
 	}
+
 	lchan := make(chan *slog.Logger, 2)
+
 	defer func() {
 		if err := recover(); err != nil {
 			fmt.Println(err)
@@ -119,6 +120,7 @@ func (l *Logs) Send(level slog.Level, msg string, ls Tp, args ...any) {
 	}
 
 	close(lchan)
+
 	switch level {
 	case slog.LevelInfo:
 		for s := range lchan {
@@ -158,6 +160,7 @@ func (l *Logs) Send(level slog.Level, msg string, ls Tp, args ...any) {
 	default:
 		l.Send(slog.LevelWarn, "未知错误", LogFiles|LogStdouts, args)
 	}
+
 }
 
 //func (l *Logs) Info(msg string, ls ...*slog.Logger) {

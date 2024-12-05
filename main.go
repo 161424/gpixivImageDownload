@@ -7,7 +7,6 @@ import (
 	"fyne.io/fyne/v2/container"
 	"fyne.io/fyne/v2/theme"
 	"fyne.io/fyne/v2/widget"
-	"gpixivImageDownload/pkg/utils"
 	themes "gpixivImageDownload/theme"
 	"gpixivImageDownload/tutorials/author"
 	"gpixivImageDownload/tutorials/home"
@@ -17,14 +16,12 @@ import (
 const preferenceCurrentTutorial = "currentTutorial"
 
 func main() {
-	oldCheck := map[string][]int{}
-	oldCheck = utils.Readcache()
 
 	menu := []string{"首页", "排行", "作者"}
-
+	defaultTheme := &themes.MyTheme{}
 	a := app.NewWithID("io.fyne.demo")
 	a.SetIcon(data.FyneLogo)
-	a.Settings().SetTheme(&themes.MyTheme{})
+	a.Settings().SetTheme(defaultTheme)
 	mainWin := a.NewWindow("go-pixiv")
 
 	menuWin := widget.NewList(
@@ -55,26 +52,27 @@ func main() {
 		if id == 0 {
 			content.Objects = []fyne.CanvasObject{home.CanvasCommon(mainWin)}
 		} else if id == 1 {
-			content.Objects = []fyne.CanvasObject{rank.CanvasRanks(mainWin, oldCheck)}
+			content.Objects = []fyne.CanvasObject{rank.CanvasRanks(mainWin)}
 		} else if id == 2 {
 			content.Objects = []fyne.CanvasObject{author.CanvasAuthor(mainWin)}
 		}
 		content.Refresh()
 	}
 	menuWin.Select(0)
-	themes := container.NewGridWithColumns(2,
-		widget.NewButton("Dark", func() {
-			a.Settings().SetTheme(theme.DarkTheme())
-		}),
-		widget.NewButton("Light", func() {
-			a.Settings().SetTheme(theme.LightTheme())
-		}),
-	)
+	//themes := container.NewGridWithColumns(2,
+	//	widget.NewButton("Dark", func() {
+	//		a.Settings().SetTheme(defaultTheme)
+	//	}),
+	//	widget.NewButton("Light", func() {
+	//		a.Settings().SetTheme(defaultTheme)
+	//		a.Settings().Theme()
+	//	}),
+	//)
 
 	minBorder := container.NewCenter()
 	minBorder.Resize(fyne.NewSize(1, 1))
 
-	newMenu := container.NewBorder(minBorder, container.NewVBox(themes, minBorder), minBorder, minBorder, menuWin)
+	newMenu := container.NewBorder(minBorder, container.NewVBox(minBorder), minBorder, minBorder, menuWin)
 
 	contentView := container.NewHSplit(newMenu, container.NewBorder(minBorder, minBorder, minBorder, minBorder, content))
 	contentView.Offset = 0.2

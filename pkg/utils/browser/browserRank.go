@@ -2,7 +2,9 @@ package browser
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"github.com/PuerkitoBio/goquery"
 	"gpixivImageDownload/dao/sql"
@@ -10,12 +12,14 @@ import (
 	"gpixivImageDownload/log"
 	"gpixivImageDownload/model"
 	"gpixivImageDownload/model/utils"
+	"io"
 	"log/slog"
 	"net/http"
 	"net/url"
 	"os"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 )
 
@@ -26,6 +30,7 @@ type Br struct {
 var Brs = &Br{}
 var l *log.Logs
 var refere = "https://www.pixiv.net"
+var mutilhttps = []string{}
 
 // rank image
 type RpJs struct {
@@ -57,66 +62,88 @@ type content struct {
 }
 
 type Cont struct {
-	Timestamp string
-	Illust    map[string]map[string]interface{}
-	User      map[string]map[string]interface{}
+	Timestamp string                            `json:"timestamp"`
+	Illust    map[string]Illust                 `json:"illust"`
+	User      map[string]map[string]interface{} `json:"user"`
+}
+
+type Illust struct {
+	UserId        string                 `json:"userId"`
+	UserName      string                 `json:"userName"`
+	PageCount     float64                `json:"pageCount"`
+	Urls          map[string]string      `json:"urls"`
+	IllustTitle   string                 `json:"illustTitle"`
+	SeriesNavData map[string]interface{} `json:"seriesNavData"`
+	ViewCount     float64                `json:"viewCount"`
+	LikeCount     float64                `json:"likeCount"`
+	Tags          Tags                   `json:"tags"`
+	CreateDate    string                 `json:"createDate"`
+	Width         float64                `json:"width"`
+	Height        float64                `json:"height"`
+	BookmarkCount float64                `json:"bookmarkCount"`
+	ResponseCount float64                `json:"responseCount"`
+	AiType        float64                `json:"aiType"`
+}
+
+type Tags struct {
+	AuthorId string                   `json:"authorId"`
+	Tags     []map[string]interface{} `json:"tags"`
 }
 
 func init() {
 	l = log.NewSlogGroup("Browser")
-	sockets, _ := url.Parse(addr.Proxy.Ip + ":" + addr.Proxy.Port)
+	sockets, _ := url.Parse("http://127.0.0.1:10809")
 	l.Send(slog.LevelInfo, fmt.Sprintf("Proxy:%s", sockets), log.LogFiles|log.LogStdouts)
-	//fmt.Println(Brs)
 	Brs.Client = &http.Client{
 		Transport: &http.Transport{
-			MaxIdleConns:    10,
-			IdleConnTimeout: 30 * time.Second,
-			Proxy:           http.ProxyURL(sockets),
+			MaxIdleConns:          50,
+			IdleConnTimeout:       60 * time.Second,
+			ResponseHeaderTimeout: 5 * time.Second,
+			Proxy:                 http.ProxyURL(sockets),
 		},
-		Timeout: 10 * time.Second,
+		CheckRedirect: func(req *http.Request, via []*http.Request) error {
+			if len(via) > 10 {
+				return fmt.Errorf("stopped after 10 redirects")
+			}
+			return nil
+		},
 	}
 
 }
 
-func hashString(s string) uint64 {
-	var h uint64 = 14695981039346656037 // offset
-	for i := 0; i < len(s); i++ {
-		h = h ^ uint64(s[i])
-		h = h * 1099511628211 // prime
-	}
-	return h
+func SetMutliHttps(cks []string) {
+	mutilhttps = cks
 }
 
-func GetPixivPage(urls string) []byte {
+func GetPixivPage(urls string, idx int) ([]byte, error) {
 	client := Brs.Client
 	var req *http.Request
 	var err error
-
 	req, err = http.NewRequest("GET", urls, nil)
 	if err != nil {
-		return nil
+		l.Send(slog.LevelError, fmt.Sprintf("url的req创建失败，err=%s", err), log.LogFiles|log.LogStdouts)
+		return nil, err
 	}
-	//fmt.Printf("conf.Header.UserAgent, %T", conf.Header.UserAgent)
-	req.Header.Set("User-Agent", addr.Header.UserAgent)
+	//req.Header.Set("if-none-match", "lns0njwq6e5otu")
+	req.Header.Set("Connection", "keep-alive")
 	req.Header.Set("Referer", refere)
-	req.Header.Set("Content-Type", "application/json; charset=utf-8")
-	for _, i := range strings.Split(sql.A.Cookies, ";") {
+	req.Header.Set("User-Agent", addr.Header.UserAgent)
+	req.Header.Set("Content-Type", "application/json")
+
+	for _, i := range strings.Split(mutilhttps[idx], "; ") {
 		a := strings.Split(i, "=")
 		req.AddCookie(&http.Cookie{Name: a[0], Value: a[1]})
 	}
 
-	//ck.reps.Store(hashString(sql.DefaultAuth().Cookies),req)
-
 	resp, err := client.Do(req)
 	if err != nil {
-		return nil
+		l.Send(slog.LevelError, fmt.Sprintf("url 请求信息失败，err=%s", err), log.LogFiles|log.LogStdouts)
+		return nil, err
 	}
-	bts := bytes.Buffer{}
 
-	bts.ReadFrom(resp.Body)
-	//fmt.Println(a, b, bts.Bytes(), resp.Body)
+	bts, _ := io.ReadAll(resp.Body)
 	defer resp.Body.Close()
-	return bts.Bytes()
+	return bts, nil
 }
 
 func (br *Br) fixUrl(url string, useHttps bool) string {
@@ -133,22 +160,30 @@ func (br *Br) fixUrl(url string, useHttps bool) string {
 	return url
 }
 
-func (br *Br) GetPixivPage(url string) (RJ *RpJs, s string) {
-
-	//url = br.fixUrl(url, true)
-	rb := GetPixivPage(url)
-	l.Send(slog.LevelDebug, url, log.LogFiles|log.LogStdouts)
-	if strings.Contains(string(rb), "Just a moment...") {
+func CheckResp(resp []byte) (s string) {
+	if strings.Contains(string(resp), "Just a moment...") {
 		s = "受到了CloudFlare 5s盾的管控， 请检查cookie和梯子是否有效"
 		return
 	}
-	//fmt.Printf()
-	if strings.Contains(string(rb), "不在排行榜统计范围内") {
+
+	if strings.Contains(string(resp), "不在排行榜统计范围内") {
 		s = "不在排行榜统计范围内"
 		return
 	}
 
-	if err := json.Unmarshal(rb, &RJ); err != nil {
+	return
+}
+
+func (br *Br) GetPixivPage(url string, idx int) (RJ *RpJs, s string) {
+	l.Send(slog.LevelInfo, url, log.LogFiles|log.LogStdouts)
+	rb, err := GetPixivPage(url, idx)
+	if err != nil {
+		l.Send(slog.LevelError, err.Error(), log.LogFiles|log.LogStdouts)
+		return
+	}
+
+	s = CheckResp(rb)
+	if err = json.Unmarshal(rb, &RJ); err != nil {
 		s = "解析错误，请检查参数是否匹配"
 		return
 	}
@@ -156,7 +191,7 @@ func (br *Br) GetPixivPage(url string) (RJ *RpJs, s string) {
 	return
 }
 
-func (br *Br) GetPixivRanking(mode, date string, comm model.Common, page int) (*RpJs, string) {
+func (br *Br) GetPixivRanking(mode, date string, comm *model.Common, page int) (df *RpJs, error string) {
 	url := fmt.Sprintf("https://www.pixiv.net/ranking.php?mode=%s", mode)
 	// https://www.pixiv.net/ranking.php?mode=daily
 	// https://www.pixiv.net/ranking.php?mode=weekly
@@ -181,6 +216,7 @@ func (br *Br) GetPixivRanking(mode, date string, comm model.Common, page int) (*
 	// content illust  只下载插画
 	// https://www.pixiv.net/ranking.php?mode=daily&content=illust&date=20240509
 	// content all  综合
+
 	if !comm.SkipIllus {
 		url = fmt.Sprintf("%s&content=%s", url, "illust")
 	} else if !comm.SkipManga {
@@ -190,19 +226,28 @@ func (br *Br) GetPixivRanking(mode, date string, comm model.Common, page int) (*
 	}
 
 	url = fmt.Sprintf("%s&p=%d&format=json", url, page)
-
-	df, err := br.GetPixivPage(url)
-
-	if err != "" {
-		return nil, err
+	for idx := range mutilhttps {
+		df, error = br.GetPixivPage(url, idx)
+		if error == "" {
+			break
+		}
 	}
 
-	return df, ""
+	return
 }
 
 func (br *Br) AnalysisUrl(url string) (*goquery.Document, error) {
 
-	resp := GetPixivPage(url)
+	resp, err := GetPixivPage(url, 0)
+	fmt.Println(string(resp))
+	s := CheckResp(resp)
+	if err != nil {
+		return nil, err
+	}
+	if s != "" {
+		return nil, errors.New(s)
+	}
+
 	df := bytes.NewReader(resp)
 	doc, err := goquery.NewDocumentFromReader(df)
 	if err != nil {
@@ -210,63 +255,6 @@ func (br *Br) AnalysisUrl(url string) (*goquery.Document, error) {
 	}
 	br.CheckWeb(doc)
 	return doc, nil
-}
-
-func (br *Br) GetImageInfo(imageId string) (imageInfo *sql.ImageInfo, err error) {
-
-	var doc *goquery.Document
-	l.Send(slog.LevelDebug, fmt.Sprintf("Getting image page: %s", imageId), log.LogStdouts)
-	// https://www.pixiv.net/artworks/115906527
-	url := fmt.Sprintf("https://www.pixiv.net%s/artworks/%s/", "", imageId)
-	if doc, err = br.AnalysisUrl(url); err != nil {
-		return nil, err
-	}
-
-	imageInfo, err = ParseRankImage(doc, imageId)
-
-	if err != nil {
-		return nil, err
-	}
-	if imageInfo.ImageMode == "ugoira_view" {
-		ugoiraMetaUrl := fmt.Sprintf("https://www.pixiv.net/ajax/illust/%s/ugoira_meta", imageId)
-		// ugoira 代表是动图，暂不进行过多考虑
-		fmt.Println(ugoiraMetaUrl)
-	}
-	imageInfo.ImageId = imageId
-	return
-}
-
-func (br *Br) DownloadImage(imgInfo *sql.ImageInfo, path string) (state [2]int) {
-
-	var wg = sync.WaitGroup{}
-	var _p string
-	for index, imgUrl := range imgInfo.ImageUrls {
-		l.Send(slog.LevelInfo, fmt.Sprintf(" - [%d/%d]Image URL : %s", index+1, imgInfo.ImageCount, imgUrl), log.LogFiles|log.LogStdouts)
-		rp := strings.Split(imgUrl, ".") // 图片类型
-		It := utils.DelSpeChar(imgInfo.ImageTitle)
-		if len(imgInfo.ImageUrls) > 1 {
-			_p = fmt.Sprintf("[%s_p%d]%s.%s", imgInfo.ImageId, index, It, rp[len(rp)-1])
-		} else {
-			_p = fmt.Sprintf("[%s]%s.%s", imgInfo.ImageId, It, rp[len(rp)-1])
-		}
-
-		filePath := path + _p
-		wg.Add(1)
-		go func(imgurl string, filepath string, imginfo sql.ImageInfo) {
-			result := br.DownLoadImage(imgurl, filepath, refere, &imginfo)
-			if result {
-				l.Send(slog.LevelInfo, fmt.Sprintf("Image %s DownLoad Success And Save In: %s", imginfo.ImageId, filepath), log.LogFiles|log.LogStdouts)
-				state[0]++
-			} else {
-				l.Send(slog.LevelWarn, fmt.Sprintf("Image %s DownLoad Fail", imginfo.ImageId), log.LogFiles|log.LogStdouts)
-				state[1]++
-			}
-			wg.Done()
-		}(imgUrl, filePath, *imgInfo)
-	}
-	wg.Wait()
-	imgInfo.Status = true
-	return
 }
 
 func (br *Br) CheckWeb(doc *goquery.Document) {
@@ -288,6 +276,91 @@ func (br *Br) CheckWeb(doc *goquery.Document) {
 
 }
 
+func (br *Br) GetImageInfo(imageId string) (imageInfo *sql.ImageInfo, err error) {
+
+	var doc *goquery.Document
+	l.Send(slog.LevelDebug, fmt.Sprintf("Getting image page: %s", imageId), log.LogStdouts)
+	// https://www.pixiv.net/artworks/115906527
+	url := fmt.Sprintf("https://www.pixiv.net/artworks/%s", imageId)
+	//fmt.Println("url", url)
+	if doc, err = br.AnalysisUrl(url); err != nil {
+		l.Send(slog.LevelError, fmt.Sprintf("url 解析失败: %s.%s", imageId, err), log.LogStdouts)
+		return nil, err
+	}
+
+	imageInfo, err = ParseRankImage(doc, imageId)
+
+	if err != nil {
+		l.Send(slog.LevelError, fmt.Sprintf("resp.body 解析json失败: %s", imageId), log.LogStdouts)
+		return nil, err
+	}
+	if imageInfo.ImageMode == "ugoira_view" {
+		ugoiraMetaUrl := fmt.Sprintf("https://www.pixiv.net/ajax/illust/%s/ugoira_meta", imageId)
+		// ugoira 代表是动图，暂不进行过多考虑
+		fmt.Println(ugoiraMetaUrl)
+	}
+	imageInfo.ImageId = imageId
+	return
+}
+
+func (br *Br) DownloadImage(ctx context.Context, imgInfo *sql.ImageInfo, path string, thread_ bool) (state [2]int64) {
+	stopG := false
+	go func() {
+		<-ctx.Done()
+		stopG = true
+
+	}()
+	var wg = sync.WaitGroup{}
+	var thread = make(chan [0]int)
+	var _p string
+	stda1 := atomic.Int64{}
+	stda2 := atomic.Int64{}
+	stda1.Store(0)
+	stda2.Store(0)
+	for index, imgUrl := range imgInfo.ImageUrls {
+		if stopG {
+			return [2]int64{}
+		}
+		if strings.TrimSpace(imgUrl) == "" {
+			continue
+		}
+		l.Send(slog.LevelInfo, fmt.Sprintf(" - [%d/%d]Image URL : %s", index+1, imgInfo.ImageCount, imgUrl), log.LogFiles|log.LogStdouts)
+		rp := strings.Split(imgUrl, ".") // 图片类型
+		It := utils.DelSpeChar(imgInfo.ImageTitle)
+		if len(imgInfo.ImageUrls) > 1 {
+			_p = fmt.Sprintf("[%s_p%d]%s.%s", imgInfo.ImageId, index, It, rp[len(rp)-1])
+		} else {
+			_p = fmt.Sprintf("[%s]%s.%s", imgInfo.ImageId, It, rp[len(rp)-1])
+		}
+
+		filePath := path + _p
+		wg.Add(1)
+		go func(imgurl string, filepath string, imginfo sql.ImageInfo) {
+			if !thread_ {
+				thread <- [0]int{}
+			}
+
+			result := br.DownLoadImage(imgurl, filepath, refere, &imginfo)
+			if result {
+				l.Send(slog.LevelInfo, fmt.Sprintf("Image %s DownLoad Success And Save In: %s", imginfo.ImageId, filepath), log.LogFiles|log.LogStdouts)
+				stda1.Add(1)
+			} else {
+				l.Send(slog.LevelWarn, fmt.Sprintf("Image %s DownLoad Fail", imginfo.ImageId), log.LogFiles|log.LogStdouts)
+				stda2.Add(1)
+			}
+			wg.Done()
+			state[0], state[1] = stda1.Load(), stda2.Load()
+			if !thread_ {
+				<-thread
+			}
+		}(imgUrl, filePath, *imgInfo)
+
+	}
+	wg.Wait()
+	imgInfo.Status = true
+	return
+}
+
 func (br *Br) DownLoadImage(imgurl, fileName, referer string, image *sql.ImageInfo) bool {
 
 	for retryCount := 0; retryCount < NewWork.Retry; retryCount++ {
@@ -305,7 +378,11 @@ func (br *Br) DownLoadImage(imgurl, fileName, referer string, image *sql.ImageIn
 
 func (br *Br) PerformDownload(imgUrl, fileNameSave string) bool {
 
-	resp := GetPixivPage(imgUrl)
+	resp, err := GetPixivPage(imgUrl, 0)
+	if err != nil {
+		l.Send(slog.LevelError, "图片链接解析失败", log.LogFiles|log.LogStdouts)
+		return false
+	}
 
 	f, err := os.OpenFile(fileNameSave, os.O_WRONLY|os.O_CREATE, 0777)
 	if err != nil {
@@ -313,15 +390,18 @@ func (br *Br) PerformDownload(imgUrl, fileNameSave string) bool {
 		return false
 	}
 	df := bytes.NewReader(resp)
-	//resp.Read(buf.Bytes())
-	//buf.Write(resp)
-	f.Write(resp)
+	_, err = f.Write(resp)
+	if err != nil {
+		l.Send(slog.LevelError, "图片写入失败", log.LogFiles|log.LogStdouts)
+		return false
+	}
 	defer f.Close()
 
 	st, _ := os.Stat(fileNameSave)
 	if st.Size() == int64(df.Len()) {
 		return true
 	}
+	fmt.Println("文件大小不对", imgUrl, st.Size(), int64(df.Len()))
 	return false
 
 }

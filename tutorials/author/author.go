@@ -12,17 +12,17 @@ import (
 	"fyne.io/fyne/v2/widget"
 	"gpixivImageDownload/model"
 	"gpixivImageDownload/pkg/author"
+	"gpixivImageDownload/pkg/utils/browser"
 	"gpixivImageDownload/tutorials/home"
 	"log"
 	"strconv"
 	"strings"
 )
 
-var AuthorVar *model.Author
+var AuthorVar = &model.Author{}
 
 func CanvasAuthor(win fyne.Window) fyne.CanvasObject {
-	loadSync, cancel := context.WithCancel(context.Background())
-
+	browser.SetMutliHttps(home.CommonVar.Ck)
 	authorName := widget.NewMultiLineEntry()
 	authorName.CursorRow = 2
 	authorName.SetPlaceHolder("竜崎いち")
@@ -39,11 +39,9 @@ func CanvasAuthor(win fyne.Window) fyne.CanvasObject {
 	authorDwProgress.DisableColor = true
 
 	dwpip := make(chan float64, 0)
-	//dwValue := 0.0
-	//authorDwProgress.Bind(binding.BindFloat(&dwValue))
 
-	f := "50"
-	//data := binding.BindInt(&f)
+	f := "5"
+
 	topEntry := widget.NewEntryWithData(binding.BindString(&f))
 	topEntry.Validator = func(s string) error {
 		n, err := strconv.Atoi(s)
@@ -71,26 +69,39 @@ func CanvasAuthor(win fyne.Window) fyne.CanvasObject {
 			fmt.Println(_rankdownloadpath)
 			rankdownloadPath.SetText(_rankdownloadpath)
 			AuthorVar.DownloadPath = _rankdownloadpath
-			//out := fmt.Sprintf("Folder %s (%d children):\n%s", list.Name(), len(children), list.String())
-			//dialog.ShowInformation("Folder Open", out, win)
+
 		}, win)
 	})
 
 	path := container.New(layout.NewHBoxLayout(), openFolder, rankdownloadPath)
 
 	Tags := widget.NewRadioGroup([]string{"作者下的Tag", "仅Tag"}, func(string) {})
+
 	Tags.Horizontal = true
+
+	loadSync, cancel := context.WithCancel(context.Background())
 	authorForm := &widget.Form{
 		Items: []*widget.FormItem{
 			{Text: "作者名字", Widget: authorName, HintText: "使用回车间隔"},
 			{Text: "作者id", Widget: authorId, HintText: "使用,间隔"},
 			{Text: "Tags选择", Widget: Tags},
-			{Text: "Tags输入", Widget: Tagsinp, HintText: "使用,间隔"},
+			{Text: "Tags输入", Widget: Tagsinp, HintText: "当tag为"},
 			{Text: "下载个数top=", Widget: topEntry, HintText: "0~100"},
 			{Text: "", Widget: path},
 		},
 		OnCancel: func() {
-			cancel()
+			confirmCallback := func(tr bool) {
+				if tr {
+					cancel()
+					return
+				}
+			}
+
+			cnf := dialog.NewConfirm("Confirmation", "确定要取消下载？", confirmCallback, win)
+			cnf.SetDismissText("是")
+			cnf.SetConfirmText("否")
+			cnf.Show()
+
 		},
 	}
 	//authorForm.Append("Tags选择", Tags)
@@ -103,6 +114,7 @@ func CanvasAuthor(win fyne.Window) fyne.CanvasObject {
 	authorForm.Append("下载进度", authorDwProgress)
 
 	authorForm.OnSubmit = func() {
+
 		var err error
 		authorDwProgress.DisableColor = false
 		if Tags.Selected == "仅Tag" {
@@ -111,7 +123,7 @@ func CanvasAuthor(win fyne.Window) fyne.CanvasObject {
 
 		AuthorVar.DwTop, err = strconv.Atoi(topEntry.Text)
 
-		if (checkDog(AuthorVar, authorName.Text, authorId.Text, Tagsinp.Text) && AuthorVar.OnlyTag == false) || err != nil {
+		if (!checkDog(AuthorVar, authorName.Text, authorId.Text, Tagsinp.Text) && AuthorVar.OnlyTag == false) || err != nil {
 			w := fyne.CurrentApp().NewWindow("错误")
 			w.SetContent(widget.NewLabel("输入信息错误！"))
 			w.Show()
@@ -119,14 +131,21 @@ func CanvasAuthor(win fyne.Window) fyne.CanvasObject {
 		}
 
 		go author.DownLoadAuth(loadSync, home.CommonVar, AuthorVar, dwpip, &result)
-		for {
-			select {
-			case v, _ := <-dwpip:
-				authorDwProgress.SetValue(v)
-			case <-loadSync.Done():
-				return
+
+		go func() {
+			for {
+				select {
+				case v, _ := <-dwpip:
+					authorDwProgress.SetValue(v)
+					resultShow.Show()
+					if v == 1 {
+						cancel()
+					}
+				case <-loadSync.Done():
+					return
+				}
 			}
-		}
+		}()
 
 	}
 
@@ -134,8 +153,22 @@ func CanvasAuthor(win fyne.Window) fyne.CanvasObject {
 }
 
 func checkDog(iptMsg *model.Author, an, ai, tg string) bool {
-	iptMsg.AuthorName = strings.Split(an, "\n")
-	iptMsg.Tags = strings.Split(ai, "#")
-	iptMsg.AuthorId = strings.Split(tg, ",")
+	iptMsg.AuthorName = Trim(an, "\n")
+	iptMsg.AuthorId = Trim(ai, ",")
+	iptMsg.Tags = strings.Trim(tg, "# ")
+
 	return true
+}
+
+func Trim(s string, sep string) []string {
+	var ret = []string{}
+	news := strings.Split(s, sep)
+	for i := 0; i < len(news); i++ {
+		ns := strings.TrimSpace(news[i])
+		if len(ns) > 0 {
+			ret = append(ret, ns)
+		}
+
+	}
+	return ret
 }

@@ -7,94 +7,91 @@ import (
 	"gpixivImageDownload/model"
 	"gpixivImageDownload/model/utils"
 	"gpixivImageDownload/pkg/core"
+	"gpixivImageDownload/pkg/utils/browser"
 	"log/slog"
 	"strconv"
-	"sync"
+	"strings"
 )
 
 //var Rootpath = (conf.ConfigData["DownloadControl"]["Path"]).(string)
 
 //const Spt = string(os.PathSeparator)
 
-var l *log.Logs
+var l = *log.Logger
 
 func DownloadRank(ctx context.Context, dwtype string, cmpts *model.Common, rkpts *model.Ranks, pip chan float64) {
-	ctxChild, _ := context.WithCancel(ctx)
+
+	stopDw := false
+	go func() {
+		<-ctx.Done()
+		stopDw = true
+	}()
+
 	var rootPath string
 	if rkpts.DownloadPath != "" {
 		rootPath = rkpts.DownloadPath
 	} else {
 		rootPath = cmpts.DownloadPath
+		err := utils.QuoteOrCreateFile(rootPath)
+
+		if err != nil {
+			l.Send(slog.LevelWarn, err.Error(), 2)
+			rootPath = rkpts.DownloadPath
+		}
 	}
 
-	//validModes := []string{"daily", "weekly", "monthly", "rookie", "original", "male", "female"}
-	//validContents := []string{"all", "illust", "ugoira", "manga"}
-
-	utils.QuoteOrCreateFile(rootPath)
-
 	l.Send(slog.LevelInfo, fmt.Sprintf(
-		"Downloading Setting View:R18 %v,Content %s,TopPage %d, SkipIllus %v, SkipUgoira %v, SkipManga %v",
-		cmpts.R18, rkpts.Content(), rkpts.Tops, cmpts.SkipIllus, cmpts.SkipUgoira, cmpts.SkipManga), log.LogStdouts|log.LogFiles)
+		"---------- DownLoadType %s ----------"+"\n"+
+			"Downloading Setting View:R18 %v,Content %s,TopPage %d, SkipIllus %v, SkipUgoira %v, SkipManga %v",
+		dwtype, cmpts.R18, rkpts.Content(), rkpts.Tops, cmpts.SkipIllus, cmpts.SkipUgoira, cmpts.SkipManga), log.LogStdouts)
 
-	//var InSCount = 0
-	var DwCount = 0
-	var ErrCount = 0
-	//var DwCounts = 0
-	var AllCount = 0
+	var DwCount int64 = 0
+	var ErrCount int64 = 0
 	var SkipCount = 0
 
 	var page = 1
 	var total = rkpts.Tops
-	wd := sync.Once{}
+	//wd := sync.Once{}
 
-	l.Send(slog.LevelInfo, fmt.Sprintf("---------- DownLoadType %s ----------", dwtype), 3)
 	var content = "all"
-	var dayList []string
+	var dateList []string
 	switch dwtype {
-	case "day":
-		dayList = rkpts.Day
-	case "week":
-		dayList = rkpts.Week
-	case "month":
-		dayList = rkpts.Month
+	case "daily":
+		dateList = rkpts.Day
+	case "weekly":
+		dateList = rkpts.Week
+	case "monthly":
+		dateList = rkpts.Month
 	}
+	browser.SetMutliHttps(cmpts.Ck)
+	fmt.Println(dateList, total)
 
-	for _, day := range dayList {
-		for AllCount <= total {
-			page = AllCount/50 + 1
-			l.Send(slog.LevelInfo, fmt.Sprintf("** Page %d **", page), 3)
-			ranks, output := core.GetPixivRanking(dwtype, day, *cmpts, page)
-			l.Send(slog.LevelInfo, output, log.LogFiles|log.LogStdouts)
-
-			if ranks == nil {
+	pip <- 0.0
+	for dayidx, day := range dateList {
+		day = strings.Join(strings.Split(day, "-"), "")
+		var DwTop = 0
+		for DwTop < total {
+			page = DwTop/50 + 1
+			// 分析排行榜页面
+			ranks, err := core.GetPixivRanking(dwtype, day, cmpts, page)
+			//fmt.Println(ranks, output)
+			l.Send(slog.LevelInfo, fmt.Sprintf("** (%s) Page %d **", dwtype, page), 3)
+			fmt.Println("?1")
+			if ranks == nil || ranks.Contents == nil {
+				l.Send(slog.LevelInfo, fmt.Sprintf("rank is nil or err:%s", err), 3)
 				break
 			}
 
-			wd.Do(func() {
-				l.Send(slog.LevelInfo, fmt.Sprintf("*Mode :%s", ranks.Mode), log.LogStdouts)
-				l.Send(slog.LevelInfo, fmt.Sprintf("*Content :%s", ranks.Content), log.LogStdouts)
-				l.Send(slog.LevelInfo, fmt.Sprintf("*Total :%d", ranks.RankTotal), log.LogStdouts)
-			})
-
 			for k := 0; k < len(ranks.Contents); k++ {
-				select {
-				case <-ctxChild.Done():
-					return
-				default:
-
+				// 下载截至条件
+				if stopDw {
+					goto td
 				}
-				//if IpI.IncludeSkipTime {
-				//	InSCount = AllCount
-				//} else {
-				//	InSCount = DwCount
-				//}
-				//
-				//if InSCount == IpI.RankTop {
-				//	break bk
-				//}
-
+				if DwTop >= total {
+					break
+				}
+				l.Send(slog.LevelInfo, fmt.Sprintf("正在下载第%d个图集", (page-1)*50+k+1), 3)
 				post := ranks.Contents[k]
-				//AllCount += 1
 				switch post.IllustType {
 				case "0":
 					if cmpts.SkipIllus {
@@ -117,20 +114,21 @@ func DownloadRank(ctx context.Context, dwtype string, cmpts *model.Common, rkpts
 				}
 
 				imageId := fmt.Sprintf(strconv.FormatFloat(post.IllustId, 'f', 0, 64))
-				l.Send(slog.LevelInfo, fmt.Sprintf("{page:%d}.Image id %s", page, imageId), log.LogStdouts)
 				pgCount, _ := strconv.Atoi(post.IllustPageCount)
-
-				result, err := core.ProcessRankImage(pgCount, imageId, rootPath, cmpts.R18, dwtype, day, content)
+				result, err := core.ProcessRankImage(ctx, pgCount, k+1, imageId, rootPath, cmpts.R18, dwtype, day, content, cmpts.MThread == true)
 
 				if err != nil {
-					l.Send(slog.LevelDebug, fmt.Sprintf("Dowdload err:%v", err), log.LogStdouts)
+					l.Send(slog.LevelDebug, fmt.Sprintf("Dowdload err:%v.{page:%d}.Image id %s", err, page, imageId), log.LogStdouts)
 				}
+
 				DwCount += result[0]
 				ErrCount += result[1]
-
-				AllCount += 1
-				l.Send(slog.LevelDebug, fmt.Sprintf("result:%v", result), log.LogStdouts)
-				pip <- float64(AllCount) / float64(total)
+				DwTop += 1
+				dwPer := float64(DwTop+total*dayidx) / float64(total*len(dateList))
+				pip <- dwPer
+				if dwPer == 1.0 {
+					break
+				}
 			}
 
 			// 判断是否是最后一页
@@ -140,10 +138,13 @@ func DownloadRank(ctx context.Context, dwtype string, cmpts *model.Common, rkpts
 		}
 
 	}
-
-	feedback := fmt.Sprintf("预计下载前top%d，需下载%d张图片，成功下载%d张图片，下载失败%d张图片，跳过%d张图片", rkpts.Tops, AllCount, DwCount, ErrCount, SkipCount)
+	fmt.Println("?2")
+td:
+	fmt.Println("?3")
+	pip <- 1.0
+	fmt.Println("?4")
+	feedback := fmt.Sprintf("预计下载%v前top%d，成功下载%d张图片，下载失败%d张图片，跳过%d张图片", dateList, rkpts.Tops, DwCount, ErrCount, SkipCount)
 	l.Send(slog.LevelInfo, feedback, log.LogFiles|log.LogStdouts)
-	//globalOptions.Auth.Output = feedback
-	//globalOptions.DB.SaveAuthDownloadRecord(globalOptions.Auth)
 
+	return
 }

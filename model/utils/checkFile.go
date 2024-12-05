@@ -1,14 +1,17 @@
 package utils
 
 import (
+	"fmt"
 	"log/slog"
 	"os"
 	"strings"
 )
 
-func QuoteOrCreateFile(n string) {
+func QuoteOrCreateFile(n string) error {
+
 	_, err := os.Stat(n)
 	if err != nil {
+		fmt.Println(n, err)
 		if os.IsNotExist(err) {
 			err = os.MkdirAll(n, os.ModePerm)
 			if err != nil {
@@ -16,6 +19,7 @@ func QuoteOrCreateFile(n string) {
 			}
 		}
 	}
+	return err
 }
 
 func CheckImageStatus(str string, ct int) (bool, error) {

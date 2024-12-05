@@ -57,6 +57,6 @@ type Work struct {
 	Width      float64  `json:"width"`
 	Height     float64  `json:"height"`
 	PageCount  int      `json:"pageCount"`
-	CreateDate int      `json:"createDate"`
+	CreateDate string   `json:"createDate"`
 	AiType     int      `json:"aiType"`
 }

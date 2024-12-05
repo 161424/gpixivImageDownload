@@ -8,19 +8,36 @@ import (
 	"fyne.io/fyne/v2/data/validation"
 	"fyne.io/fyne/v2/dialog"
 	"fyne.io/fyne/v2/widget"
+	"gpixivImageDownload/conf"
+	log2 "gpixivImageDownload/log"
 	"gpixivImageDownload/model"
 	"log"
 	"strings"
+	"time"
 )
 
 var CommonVar = &model.Common{}
+var l = log2.Logger
+
+func init() {
+	v := conf.Conf.Sub("CmtOption")
+	e := v.Unmarshal(CommonVar)
+	if e != nil {
+		fmt.Println(e)
+	}
+	CommonVar.DownloadPath = v.GetString("DownloadPath")
+	//fmt.Println(CommonVar)
+}
 
 func CanvasCommon(win fyne.Window) fyne.CanvasObject {
+
+	comm2update := make(chan string, 4)
 
 	ckList := widget.NewMultiLineEntry()
 	ckList.SetPlaceHolder("使用回车区分不同ck")
 	ckList.Validator = validation.NewRegexp(`^.+$`, "ck无效")
 	ckList.CursorColumn = 30
+
 	R18 := widget.NewCheck("", func(bool) {})
 	mThread := widget.NewCheck("", func(bool) {})
 	skipIllus := widget.NewCheck("", func(bool) {})
@@ -44,8 +61,8 @@ func CanvasCommon(win fyne.Window) fyne.CanvasObject {
 			CommonVar.SkipIllus = skipIllus.Checked
 			CommonVar.SkipUgoira = skipUgoira.Checked
 			CommonVar.SkipManga = skipManga.Checked
+			comm2update <- "修改common配置"
 
-			fmt.Println("Form submitted", CommonVar)
 		},
 	}
 	form.SubmitText = "确认"
@@ -71,12 +88,30 @@ func CanvasCommon(win fyne.Window) fyne.CanvasObject {
 			downloadPath.SetText(list.String())
 			CommonVar.DownloadPath = list.String()
 			downloadPath.Refresh()
+			CommonVar.Save()
+			comm2update <- "修改common地址"
+
 			//out := fmt.Sprintf("Folder %s (%d children):\n%s", list.Name(), len(children), list.String())
 			//dialog.ShowInformation("Folder Open", out, win)
 		}, win)
 	})
 
 	downloadPathWig := container.NewHBox(openFolder, downloadPath)
+
+	CommonVar.Do(func() {
+		go func() {
+			t := time.NewTicker(time.Minute)
+			for {
+				select {
+				case s := <-comm2update:
+					s1 := CommonVar.Save()
+					l.Send(4, s+s1, 2)
+				case <-t.C:
+					l.Send(4, fmt.Sprintf("home heart", &CommonVar), 1)
+				}
+			}
+		}()
+	})
 
 	return container.NewVBox(form, downloadPathWig)
 

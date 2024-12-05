@@ -20,7 +20,7 @@ func init() {
 
 	path, _ := os.Getwd()
 	//path = filepath.Dir(path)
-	fmt.Println(path)
+	fmt.Println("pwd:", path)
 	viper.SetConfigFile(filepath.Join(path, "conf", "config.yaml"))
 	viper.WatchConfig()
 	if err := viper.ReadInConfig(); err != nil {
@@ -35,6 +35,8 @@ func init() {
 
 	l.Send(slog.LevelInfo, fmt.Sprintf(e.GetMsg(code), "config"), log.LogFiles|log.LogStdouts)
 	Conf = viper.GetViper()
+	fmt.Println(Conf.AllSettings())
+	fmt.Println()
 
 }
 

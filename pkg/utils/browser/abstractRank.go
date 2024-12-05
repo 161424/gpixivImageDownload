@@ -78,10 +78,13 @@ func IsGuroDisabled(page *goquery.Document) bool {
 func PrintInfo(img *sql.ImageInfo) {
 	fmt.Printf("  User Name: %s\n", img.UserName)
 	fmt.Printf("  Image Title: %s\n", img.ImageTitle)
+	fmt.Printf("  Rank: %d\n", img.ImageRank)
 	fmt.Printf("  Tags Title: %s\n", img.ImageTags)
 	fmt.Printf("  Translated Tags: %s\n", img.TranslationTag)
 	fmt.Printf("  Date: %s\n", img.WorksDateDateTime)
 	fmt.Printf("  Mode: %s\n", img.ImageMode)
+	fmt.Printf("  Urls: %s\n", img.ImageUrls)
+
 	if img.ImageMode == "manga" {
 		fmt.Printf("  Pages: %d\n", img.ImageCount)
 	}
@@ -128,16 +131,18 @@ func ParseRankImage(doc *goquery.Document, imgId string) (*sql.ImageInfo, error)
 
 	r, _ := doc.Find("meta#meta-preload-data").Attr("content")
 	var con = &Cont{}
-	err = json.Unmarshal([]byte(r), &con)
-	if len(con.Illust[imgId]) == 0 {
+	var root Illust
+	var ok bool
+	err = json.Unmarshal([]byte(r), con)
+	if root, ok = con.Illust[imgId]; ok == false || err != nil {
+		fmt.Println("abstractRank err:", err, r)
 		return nil, err
 	}
 
-	root := con.Illust[imgId]
+	imageCount := int(root.PageCount)
 
-	imageCount := int((root["pageCount"]).(float64))
-	tempUrl := ((root["urls"]).(map[string]interface{})["original"]).(string)
-	tempResizedUrl := ((root["urls"]).(map[string]interface{})["regular"]).(string)
+	tempUrl := root.Urls["original"]
+	tempResizedUrl := root.Urls["regular"]
 	imageInfo.ImageCount = imageCount
 
 	//  不够齐全
@@ -168,45 +173,38 @@ func ParseRankImage(doc *goquery.Document, imgId string) (*sql.ImageInfo, error)
 		}
 
 	}
-	//fmt.Println(imageInfo.ImageUrls)
-	imageInfo.ImageTitle = (root["illustTitle"]).(string)
+	imageInfo.ImageTitle = root.IllustTitle
 	//imageInfo.ImageCaption = (root["illustComment"]).(string)
-	if root["seriesNavData"] == nil { // 是否是系列
+	if root.SeriesNavData == nil { // 是否是系列
 		imageInfo.SeriesNavData = map[string]string{"nil": "nil"}
 	} else {
 		mss := make(map[string]string, 6)
-		mss["seriesType"] = (root["seriesNavData"].(map[string]interface{})["seriesType"]).(string)
-		mss["seriesId"] = (root["seriesNavData"].(map[string]interface{})["seriesId"]).(string)
-		mss["title"] = (root["seriesNavData"].(map[string]interface{})["title"]).(string)
-		mss["order"] = strconv.Itoa((root["seriesNavData"].(map[string]interface{})["order"]).(int))
-		if root["seriesNavData"].(map[string]interface{})["prev"] == nil {
+		mss["seriesType"] = root.SeriesNavData["seriesType"].(string)
+		mss["seriesId"] = root.SeriesNavData["seriesId"].(string)
+		mss["title"] = root.SeriesNavData["title"].(string)
+		mss["order"] = strconv.Itoa(root.SeriesNavData["order"].(int))
+		if root.SeriesNavData["prev"] == nil {
 			mss["prev"] = ""
 		} else {
-			mss["prev"] = ((root["seriesNavData"].(map[string]map[string]interface{})["prev"])["id"]).(string)
+			mss["prev"] = root.SeriesNavData["prev"].(map[string]interface{})["id"].(string)
 		}
 
-		if root["seriesNavData"].(map[string]interface{})["prev"] == nil {
+		if root.SeriesNavData["next"] == nil {
 			mss["next"] = ""
 		} else {
-			mss["next"] = ((root["seriesNavData"].(map[string]map[string]interface{})["prev"])["id"]).(string)
+			mss["next"] = root.SeriesNavData["next"].(map[string]interface{})["id"].(string)
 		}
 
 		imageInfo.SeriesNavData = mss
 	}
 
-	imageInfo.JdRtv = (root["viewCount"]).(float64) // 查看人数
-	imageInfo.JdRtc = (root["likeCount"]).(float64) // 喜欢人数
-	tags := root["tags"]
-	if tg, ok := tags.(map[string]interface{}); ok == true && tg != nil {
+	imageInfo.JdRtv = root.ViewCount // 查看人数
+	imageInfo.JdRtc = root.LikeCount // 喜欢人数
 
-		//if tg == nil {
-		//	panic("tg err")
-		//}
-
-		gt := tg["tags"]
-		p := (gt).([]interface{})
-		for _, tag := range p {
-			tagp := tag.(map[string]interface{})
+	if root.Tags.Tags != nil {
+		p := root.Tags.Tags
+		for _, tagp := range p {
+			//tagp := tag
 			imageInfo.ImageTags = append(imageInfo.ImageTags, (tagp["tag"]).(string))
 			if v, isok := tagp["translation"]; isok == true {
 				if v != nil {
@@ -218,24 +216,19 @@ func ParseRankImage(doc *goquery.Document, imgId string) (*sql.ImageInfo, error)
 		}
 	}
 
-	//fmt.Println("createDate", root["createDate"])
-	imageInfo.WorksDateDateTime, _ = time.Parse(time.RFC3339, (root["createDate"]).(string))
-	imageInfo.WorksResolution = fmt.Sprintf("%.0fx%.0f", (root["width"]).(float64), (root["height"]).(float64))
-	//if imageCount > 1 {
-	//	imageInfo.WorksResolution = fmt.Sprintf("Multiple images: %dP", imageCount)
-	//}
+	imageInfo.WorksDateDateTime, _ = time.Parse(time.RFC3339, root.CreateDate)
+	imageInfo.WorksResolution = fmt.Sprintf("%.0fx%.0f", root.Width, root.Height)
 
-	imageInfo.BookmarkCount = int64((root["bookmarkCount"]).(float64))
-	imageInfo.ImageResponseCount = (root["responseCount"]).(float64)
+	imageInfo.BookmarkCount = int64(root.BookmarkCount)
+	imageInfo.ImageResponseCount = root.ResponseCount
 
-	if root["aiType"] != nil {
-		imageInfo.AiType = int((root["aiType"]).(float64)) //1 == non-AI, 2 == AI-generated
-		if imageInfo.AiType == 2 {
-			imageInfo.ImageTags = append(imageInfo.ImageTags, "AI-generated")
-		}
+	imageInfo.AiType = int(root.AiType) //1 == non-AI, 2 == AI-generated
+	if imageInfo.AiType == 2 {
+		imageInfo.ImageTags = append(imageInfo.ImageTags, "AI-generated")
 	}
-	imageInfo.UserID = (root["userId"]).(string)
-	imageInfo.UserName = (root["userName"]).(string)
+
+	imageInfo.UserID = root.UserId
+	imageInfo.UserName = root.UserName
 	//imageInfo.UserAccount = (root["userAccount"]).(string)
 
 	return imageInfo, nil

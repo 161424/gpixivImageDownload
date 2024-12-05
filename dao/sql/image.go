@@ -15,6 +15,7 @@ type ImageInfo struct {
 	//gorm.Model
 
 	ImageId          string         `gorm:"column:ImageId;NOT NULL;primaryKey"`
+	ImageRank        int            `gorm:"column:ImageId;NOT NULL;primaryKey"`
 	Status           bool           `gorm:"column:Status"`
 	ImageMode        string         `gorm:"column:ImageMode"`
 	ImageUrls        pq.StringArray `gorm:"column:ImageUrls;type:text[]"`

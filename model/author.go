@@ -1,13 +1,16 @@
 package model
 
+import "sync"
+
 type Author struct {
+	sync.Once
 	AuthorName   []string
 	AuthorId     []string
 	DwTop        int
 	OnlyTag      bool
-	Tags         []string
+	Tags         string
 	BookMark     bool
-	OffSet       string
+	OffSet       int
 	Profile      bool
 	DownloadPath string
 }

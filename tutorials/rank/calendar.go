@@ -13,7 +13,7 @@ import (
 	"time"
 )
 
-func Calendars(_ fyne.Window, oldCheck, newCheck map[string][]int) {
+func Calendars(_ fyne.Window, oldCheck map[string][]int, newCheck map[string]*[]int) {
 	var ranks = map[string]bool{"date": false, "week": false, "month": false}
 	myWindow := fyne.CurrentApp().NewWindow("请选择下载日期")
 	years := time.Now().Year()
@@ -26,7 +26,10 @@ func Calendars(_ fyne.Window, oldCheck, newCheck map[string][]int) {
 	binderq.Set(s)
 	//newCheck[s] = []int{}
 	var bts []fyne.CanvasObject
-	bts, newCheck[s] = printCalendars(years, months, oldCheck[s], &ranks)
+	if newCheck[s] == nil {
+		newCheck[s] = new([]int)
+	}
+	bts = printCalendars(years, months, oldCheck[s], newCheck[s], &ranks)
 	btss := container.NewGridWithColumns(8, bts...)
 
 	contentCache := map[string]*fyne.Container{}
@@ -43,7 +46,11 @@ func Calendars(_ fyne.Window, oldCheck, newCheck map[string][]int) {
 			content.Layout = oldBtss.Layout
 			content.Objects = oldBtss.Objects
 		} else {
-			bts, newCheck[s] = printCalendars(years, months, oldCheck[s], &ranks)
+			if newCheck[s] == nil {
+				newCheck[s] = new([]int)
+			}
+
+			bts = printCalendars(years, months, oldCheck[s], newCheck[s], &ranks)
 			btss = container.NewGridWithColumns(8, bts...)
 			content.Layout = btss.Layout
 			content.Objects = btss.Objects
@@ -60,7 +67,10 @@ func Calendars(_ fyne.Window, oldCheck, newCheck map[string][]int) {
 			content.Layout = oldBtss.Layout
 			content.Objects = oldBtss.Objects
 		} else {
-			bts, newCheck[s] = printCalendars(years, months, oldCheck[s], &ranks)
+			if newCheck[s] == nil {
+				newCheck[s] = new([]int)
+			}
+			bts = printCalendars(years, months, oldCheck[s], newCheck[s], &ranks)
 			btss = container.NewGridWithColumns(8, bts...)
 			content.Layout = btss.Layout
 			content.Objects = btss.Objects
@@ -80,7 +90,10 @@ func Calendars(_ fyne.Window, oldCheck, newCheck map[string][]int) {
 			content.Layout = oldBtss.Layout
 			content.Objects = oldBtss.Objects
 		} else {
-			bts, newCheck[s] = printCalendars(years, months, oldCheck[s], &ranks)
+			if newCheck[s] == nil {
+				newCheck[s] = new([]int)
+			}
+			bts = printCalendars(years, months, oldCheck[s], newCheck[s], &ranks)
 			btss = container.NewGridWithColumns(8, bts...)
 			content.Layout = btss.Layout
 			content.Objects = btss.Objects
@@ -96,7 +109,11 @@ func Calendars(_ fyne.Window, oldCheck, newCheck map[string][]int) {
 			content.Layout = oldBtss.Layout
 			content.Objects = oldBtss.Objects
 		} else {
-			bts, newCheck[s] = printCalendars(years, months, oldCheck[s], &ranks)
+			if newCheck[s] == nil {
+				newCheck[s] = new([]int)
+			}
+			bts = printCalendars(years, months, oldCheck[s], newCheck[s], &ranks)
+
 			btss = container.NewGridWithColumns(8, bts...)
 			content.Layout = btss.Layout
 			content.Objects = btss.Objects
@@ -106,17 +123,6 @@ func Calendars(_ fyne.Window, oldCheck, newCheck map[string][]int) {
 	})
 
 	H := container.NewGridWithColumns(5, bt1, bt2, rq, bt3, bt4)
-
-	//daysWeek := container.NewGridWithColumns(8,
-	//	widget.NewLabel(" 周 数 "),
-	//	widget.NewLabel(" 星期一 "),
-	//	widget.NewLabel(" 星期二 "),
-	//	widget.NewLabel(" 星期三 "),
-	//	widget.NewLabel(" 星期四 "),
-	//	widget.NewLabel(" 星期五 "),
-	//	widget.NewLabel(" 星期六 "),
-	//	widget.NewLabel(" 星期日 "),
-	//)
 
 	daysWeek := container.NewGridWithColumns(7,
 		//widget.NewLabel(" 周 数 "),
@@ -161,11 +167,12 @@ func Calendars(_ fyne.Window, oldCheck, newCheck map[string][]int) {
 	})
 	myWindow.SetContent(container.New(layout.NewVBoxLayout(), H, cales, confirm))
 	myWindow.Show()
+	//fmt.Println(1.5, newCheck, oldCheck)
 
 }
 
-func printCalendars(year, month int, old []int, v *map[string]bool) ([]fyne.CanvasObject, []int) { //定义了一个名为printCalendar的函数，它接受两个整数参数，分别表示年份和月份。s
-	news := []int{}
+func printCalendars(year, month int, old []int, news *[]int, v *map[string]bool) []fyne.CanvasObject { //定义了一个名为printCalendar的函数，它接受两个整数参数，分别表示年份和月份。s
+
 	nowYear, nowMonth, nowDay := time.Now().Date()
 	re := []int{}
 	days := make([]int, 42)                    // 创建一个长度为42的整数切片days。切片是Go语言中的动态数组，可以用于存储一系列整数。
@@ -176,7 +183,6 @@ func printCalendars(year, month int, old []int, v *map[string]bool) ([]fyne.Canv
 		days[i+dayOfWeek] = day // 在循环体内，将当前日期`day`存储到切片`days`的指定索引位置。索引是通过计算星期几和循环迭代次数得到的。
 		day++                   //在每次循环迭代后，将日期变量`day`加 1，以便在下一次迭代中处理下一天的日期。
 	}
-	//fmt.Println(days, dayOfWeek)
 	//fmt.Println("      Sun Mon Tue Wed Thu Fri Sat") //输出一周七天的头部标题，用于对齐日期。
 	weekNumStart := (time.Date(year, time.Month(month), 1, 0, 0, 0, 0, time.Local).YearDay()+dayOfWeek)/7 + 1
 	weekNumNow := (time.Date(nowYear, nowMonth, nowDay, 0, 0, 0, 0, time.Local).YearDay()+dayOfWeek)/7 + 1
@@ -243,50 +249,49 @@ func printCalendars(year, month int, old []int, v *map[string]bool) ([]fyne.Canv
 			monthBorderColor := theme.ButtonColor()
 			btt = widget.NewColorButton(bs, func() {
 				checked = !checked
-				//fmt.Println(v, checked, oldDownloadDay, oldDownloadWeek, oldDownloadMonth)
 				if (*v)["date"] {
-					if checked {
+					if oldDownloadDay {
 						dateTextColor.Style.ColorNRGBA = themes.ColorBluAA
-						news = append(news, we)
-						//fmt.Printf("%p,%p,%p,%p,%p", &dayCheck, &we, new, &checked, &orangeButton)
 					} else {
-						if oldDownloadDay {
+						if checked {
+							*news = append(*news, we)
 							dateTextColor.Style.ColorNRGBA = themes.ColorBluHA
 						} else {
+							*news = DeleteSlice(*news, we)
 							dateTextColor.Style.ColorNRGBA = nil
 						}
-						news = DeleteSlice(news, we)
 					}
 					btt.TextStyle = dateTextColor
 					//fmt.Println(dateTextColor.Style.ColorNRGBA)
 				}
 				if (*v)["week"] {
-					if checked {
+					if oldDownloadWeek {
 						weekButtonColor = themes.ColorGreAA
-						news = append(news, -we)
-						//fmt.Println("?", checked)
 					} else {
-						if oldDownloadWeek {
+						if checked {
+							*news = append(*news, -we)
 							weekButtonColor = themes.ColorGreHA
 						} else {
+							*news = DeleteSlice(*news, -we)
 							weekButtonColor = theme.ButtonColor()
 						}
-						news = DeleteSlice(news, -we)
+
 					}
 					btt.ButtonColor = weekButtonColor
 					//fmt.Println(weekButtonColor)
 				}
 				if (*v)["month"] {
-					if checked {
+					if oldDownloadMonth {
 						monthBorderColor = themes.ColorRedAA
-						news = append(news, -100-we)
 					} else {
-						if oldDownloadMonth {
+						if checked {
+							*news = append(*news, -100-we)
 							monthBorderColor = themes.ColorRedHA
 						} else {
+							*news = DeleteSlice(*news, -100-we)
 							monthBorderColor = theme.ButtonColor()
 						}
-						news = DeleteSlice(news, -100-we)
+
 					}
 					btt.BorderColor = monthBorderColor
 
@@ -342,10 +347,8 @@ func printCalendars(year, month int, old []int, v *map[string]bool) ([]fyne.Canv
 		//	time.Date(nowYear, nowMonth, nowDay, 0, 0, 0, 0, time.Local), time.Date(year, time.Month(month), dayCheck-1, 0, 0, 0, 0, time.Local).Sub(
 		//		time.Date(nowYear, nowMonth, nowDay, 0, 0, 0, 0, time.Local)) > 0)
 		bts = append(bts, btt)
-
 	}
-
-	return bts, news
+	return bts
 }
 
 func DeleteSlice(a []int, elem int) []int {

@@ -14,8 +14,13 @@ import (
 func (br *Br) GetArtistPage(url string) (body *sql.AuthorWorks, s string) {
 
 	url = br.fixUrl(url, true)
-	rb := GetPixivPage(url)
 	l.Send(slog.LevelDebug, url, log.LogFiles|log.LogStdouts)
+	rb, err := GetPixivPage(url, 0)
+	if err != nil {
+		l.Send(slog.LevelError, err.Error(), log.LogFiles|log.LogStdouts)
+		return
+	}
+
 	s = ""
 	if strings.Contains(string(rb), "Just a moment...") {
 		s = "受到了CloudFlare 5s盾的管控， 请检查cookie和梯子是否有效"
